@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {                          /* Specify what module code is generated. */
+    "rootDir": "./src",                                  /* Specify the root folder within your source files. */                            /* Skip type checking all .d.ts files. */
+  },
+  "include": ["./src/**/*.ts"]
+}
