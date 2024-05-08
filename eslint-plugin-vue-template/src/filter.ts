@@ -27,7 +27,7 @@ function create(context: Rule.RuleContext) {
   });
 }
 
-export const meta = {
+const meta = {
   type: "suggestion",
   docs: {
     description: "remove filter expression.",
@@ -36,4 +36,4 @@ export const meta = {
   schema: [],
 } as const;
 
-export { create };
+export default { create, meta };

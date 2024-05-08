@@ -24,6 +24,7 @@ module.exports = {
   plugins: ["vue-template"],
   rules: {
     "vue-template/gridsystem": "error",
+    "vue-template/filter": "error"
   },
   overrides: [
     {
