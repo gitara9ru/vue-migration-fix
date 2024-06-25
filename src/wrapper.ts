@@ -7,7 +7,7 @@ import { parse } from '@vue/compiler-sfc';
 
 
 // ファイルの読み込み
-const code = fs.readFileSync('output/App.vue', 'utf-8');
+const code = fs.readFileSync('output/Wrapper.vue', 'utf-8');
 
 // Vueファイルの解析
 const { descriptor } = parse(code);
@@ -23,33 +23,69 @@ const ast = parser.parse(scriptContent, {
   plugins: ['classProperties', 'decorators-legacy', 'typescript']
 });
 
-// ASTのトラバースと変換
-// ASTを走査して変換を行う
+
+
 traverse(ast, {
-  CallExpression(path) {
-    if (path.findParent((p) => p.isClassMethod())) {
-      if (
-        t.isIdentifier(path.node.callee) &&
-        !t.isMemberExpression(path.node.callee) &&
-        path.node.callee.name !== 'wrapper'
-      ) {
-        // this.wrapper(externalMethod)(arg1, arg2)の形式に変換
-        path.replaceWith(
-          t.callExpression(
-            t.callExpression(
-              t.memberExpression(
-                t.thisExpression(),
-                t.identifier('wrapper')
-              ),
-              [t.identifier(path.node.callee.name)]
-            ),
-            path.node.arguments
-          )
-        );
+  CallExpression: {
+    exit(path) {
+      const { node } = path;
+
+      // デコレータの場合は変換しない
+      if (t.isDecorator(path.parent)) {
+        return;
       }
+
+      // すでにthis.$wrapper関数の呼び出しの場合は変換しない
+      if (
+        t.isMemberExpression(node.callee) &&
+        t.isThisExpression(node.callee.object) &&
+        t.isIdentifier(node.callee.property) &&
+        node.callee.property.name === '$wrapper'
+      ) {
+        return;
+      }
+
+      // this.method() の呼び出しは変換しない
+      if (
+        t.isMemberExpression(node.callee) &&
+        t.isThisExpression(node.callee.object)
+      ) {
+        return;
+      }
+
+      let newNode;
+      if (t.isMemberExpression(node.callee)) {
+        const { object, property } = node.callee;
+        newNode = t.callExpression(
+          t.memberExpression(t.thisExpression(), t.identifier('$wrapper')),
+          [
+            t.objectExpression([
+              //@ts-ignore
+              t.objectProperty(t.identifier("fn"), property),
+              t.objectProperty(t.identifier("bind"), object),
+            ]),
+            ...node.arguments,
+          ]
+        );
+      } else if (t.isIdentifier(node.callee)) {
+        newNode = t.callExpression(
+          t.memberExpression(t.thisExpression(), t.identifier('$wrapper')),
+          [
+            t.objectExpression([
+              t.objectProperty(t.identifier("fn"), node.callee),
+            ]),
+            ...node.arguments,
+          ]
+        );
+      } else {
+        return; // その他の形式の呼び出しは変換しない
+      }
+
+      path.replaceWith(newNode);
     }
   },
 });
+
 
 
 
@@ -61,3 +97,56 @@ console.log(output.code);  // 変換後のコードを表示
 
 // 変換後のコードをファイルに書き出す
 fs.writeFileSync('converted-component.vue', output.code);
+
+
+
+// traverse(ast, {
+//   CallExpression(path) {
+//     const { node } = path;
+
+//     // すでにwrapper関数内の呼び出しの場合は変換しない
+//     // すでにwrapper関数の呼び出しの場合は変換しない
+//     if (t.isIdentifier(node.callee) && node.callee.name === 'wrapper') {
+//       return;
+//     }
+
+//     if (t.isMemberExpression(node.callee)) {
+//       const { object, property } = node.callee;
+
+//       // this.method() の呼び出しは変換しない
+//       if (t.isThisExpression(object)) {
+//         return;
+//       }
+
+//       // その他のメソッド呼び出しを変換（外部クラスのメソッドを含む）
+//       path.replaceWith(
+//         t.callExpression(
+//           t.memberExpression(t.thisExpression(), t.identifier('$wrapper')),
+//           [
+//             t.objectExpression([
+//               //@ts-ignore
+//               t.objectProperty(t.identifier("fn"), property),
+//               t.objectProperty(t.identifier("bind"), object),
+//             ]),
+//             ...node.arguments,
+//           ]
+//         )
+//       );
+//       // 変換後のノードをスキップ
+//       path.skip();
+//     } else if (t.isIdentifier(node.callee)) {
+//       path.replaceWith(
+//         t.callExpression(
+//           t.memberExpression(t.thisExpression(), t.identifier('$wrapper')),
+//           [
+//             t.objectExpression([
+//               t.objectProperty(t.identifier("fn"), node.callee),
+//             ]),
+//             ...node.arguments,
+//           ]
+//         )
+//       );
+//       path.skip()
+//     }
+//   },
+// });

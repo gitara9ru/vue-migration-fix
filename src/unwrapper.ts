@@ -28,22 +28,49 @@ const ast = parser.parse(scriptContent, {
 
 traverse(ast, {
   CallExpression(path) {
+    const { node } = path;
+
     if (
-      t.isCallExpression(path.node.callee) &&
-      t.isMemberExpression(path.node.callee.callee) &&
-      t.isThisExpression(path.node.callee.callee.object) &&
-      t.isIdentifier(path.node.callee.callee.property) &&
-      path.node.callee.callee.property.name === 'wrapper' &&
-      path.node.callee.arguments.length === 1 &&
-      t.isIdentifier(path.node.callee.arguments[0])
+      t.isMemberExpression(node.callee) &&
+      t.isThisExpression(node.callee.object) &&
+      t.isIdentifier(node.callee.property) &&
+      node.callee.property.name === '$wrapper' &&
+      node.arguments.length >= 1
     ) {
-      // this.wrapper(externalMethod)(arg1, arg2) を externalMethod(arg1, arg2) に変換
-      path.replaceWith(
-        t.callExpression(
-          path.node.callee.arguments[0],
-          path.node.arguments
-        )
-      );
+      const [firstArg, ...restArgs] = node.arguments;
+
+      if (t.isObjectExpression(firstArg) && firstArg.properties.length > 0) {
+        const fnProp = firstArg.properties.find(
+          (prop): prop is t.ObjectProperty =>
+            t.isObjectProperty(prop) &&
+            t.isIdentifier(prop.key) &&
+            prop.key.name === 'fn'
+        );
+
+        const bindProp = firstArg.properties.find(
+          (prop): prop is t.ObjectProperty =>
+            t.isObjectProperty(prop) &&
+            t.isIdentifier(prop.key) &&
+            prop.key.name === 'bind'
+        );
+
+        if (fnProp && t.isObjectProperty(fnProp)) {
+          if (bindProp && t.isObjectProperty(bindProp)) {
+            // メソッド呼び出しの復元
+            path.replaceWith(
+              t.callExpression(
+                t.memberExpression(bindProp.value as t.Expression, fnProp.value as t.Expression),
+                restArgs
+              )
+            );
+          } else {
+            // 関数呼び出しの復元
+            path.replaceWith(
+              t.callExpression(fnProp.value as t.Expression, restArgs)
+            );
+          }
+        }
+      }
     }
   },
 });
